@@ -1,0 +1,897 @@
+import React, { useState, useEffect } from 'react';
+import { Activity, TrendingUp, Calendar, User, Dumbbell, Flame, Clock, Target, Award, BarChart3, MessageCircle, X, Send } from 'lucide-react';
+import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+
+export default function FitTrackPro() {
+  const [page, setPage] = useState('loading');
+  const [profile, setProfile] = useState(null);
+  const [workouts, setWorkouts] = useState([]);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  const [peso, setPeso] = useState('');
+  const [altura, setAltura] = useState('');
+  const [idade, setIdade] = useState('');
+  const [sexo, setSexo] = useState('masculino');
+  
+  const [exercicio, setExercicio] = useState('corrida');
+  const [tempo, setTempo] = useState('');
+  const [intensidade, setIntensidade] = useState('moderado');
+  const [pesoAtual, setPesoAtual] = useState('');
+  const [historicoPeso, setHistoricoPeso] = useState([]);
+
+  // Estados do Chat IA
+  const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // ⚠️ COLOQUE SUA API KEY DA GROQ AQUI ⚠️
+  const GROQ_API_KEY = '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';
+
+  const exercicios = {
+    corrida: { name: 'Corrida', icon: '🏃', mets: { leve: 6, moderado: 8.5, intenso: 11 } },
+    caminhada: { name: 'Caminhada', icon: '🚶', mets: { leve: 3, moderado: 4, intenso: 5 } },
+    ciclismo: { name: 'Ciclismo', icon: '🚴', mets: { leve: 4, moderado: 8, intenso: 12 } },
+    natacao: { name: 'Natação', icon: '🏊', mets: { leve: 6, moderado: 8, intenso: 11 } },
+    musculacao: { name: 'Musculação', icon: '🏋️', mets: { leve: 3, moderado: 5, intenso: 6 } },
+    crossfit: { name: 'CrossFit', icon: '💪', mets: { leve: 5, moderado: 8, intenso: 10 } },
+    funcional: { name: 'Funcional', icon: '🤸', mets: { leve: 4, moderado: 6, intenso: 9 } },
+    yoga: { name: 'Yoga', icon: '🧘', mets: { leve: 2, moderado: 3, intenso: 4 } }
+  };
+
+  useEffect(() => {
+    setTimeout(() => setPage('register'), 100);
+  }, []);
+
+  // Função para chamar a IA Groq
+  const sendMessageToAI = async (userMessage) => {
+    if (GROQ_API_KEY === 'SUA_API_KEY_GROQ_AQUI') {
+      return 'Por favor, configure sua API key da Groq primeiro! Acesse: https://console.groq.com/keys';
+    }
+
+    try {
+      const userContext = profile ? `
+Informações do usuário:
+- Peso: ${profile.peso}kg
+- Altura: ${profile.altura}cm
+- Idade: ${profile.idade} anos
+- Treinos realizados: ${workouts.length}
+- Total de calorias queimadas: ${workouts.reduce((s, w) => s + w.calorias, 0)} cal
+      ` : '';
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `Você é um personal trainer e nutricionista virtual especializado em fitness e saúde. 
+Você ajuda com:
+- Dicas de treino e exercícios
+- Orientações sobre dieta e nutrição
+- Cálculo de calorias e macronutrientes
+- Planos de treino personalizados
+- Motivação e dicas de saúde
+
+Seja amigável, motivador e sempre baseie suas respostas em informações científicas.
+Responda de forma concisa e prática.
+
+${userContext}`
+            },
+            {
+              role: 'user',
+              content: userMessage
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 500
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('Erro ao chamar Groq:', error);
+      return 'Desculpe, houve um erro ao processar sua mensagem. Verifique sua API key ou tente novamente.';
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
+
+    const userMsg = { role: 'user', content: inputMessage };
+    setMessages([...messages, userMsg]);
+    setInputMessage('');
+    setIsLoading(true);
+
+    const aiResponse = await sendMessageToAI(inputMessage);
+    
+    setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
+    setIsLoading(false);
+  };
+
+  const calcCalorias = (ex, t, int) => {
+    const met = exercicios[ex].mets[int];
+    return Math.round(met * profile.peso * (t / 60));
+  };
+
+  const calcTMB = () => {
+    if (sexo === 'masculino' || profile?.sexo === 'masculino') {
+      const p = profile?.peso || parseFloat(peso);
+      const a = profile?.altura || parseFloat(altura);
+      const i = profile?.idade || parseInt(idade);
+      return (10 * p) + (6.25 * a) - (5 * i) + 5;
+    }
+    const p = profile?.peso || parseFloat(peso);
+    const a = profile?.altura || parseFloat(altura);
+    const i = profile?.idade || parseInt(idade);
+    return (10 * p) + (6.25 * a) - (5 * i) - 161;
+  };
+
+  const calcIMC = () => {
+    const p = profile?.peso || parseFloat(peso);
+    const a = (profile?.altura || parseFloat(altura)) / 100;
+    return (p / (a * a)).toFixed(1);
+  };
+
+  const getIMCCategoria = (imc) => {
+    if (imc < 18.5) return { texto: 'Abaixo do peso', cor: 'text-blue-400' };
+    if (imc < 25) return { texto: 'Peso normal', cor: 'text-green-400' };
+    if (imc < 30) return { texto: 'Sobrepeso', cor: 'text-yellow-400' };
+    return { texto: 'Obesidade', cor: 'text-red-400' };
+  };
+
+  const adicionarPeso = () => {
+    if (!pesoAtual) {
+      alert('Digite o peso!');
+      return;
+    }
+    const novoPeso = {
+      data: new Date().toISOString(),
+      peso: parseFloat(pesoAtual)
+    };
+    setHistoricoPeso([...historicoPeso, novoPeso]);
+    setProfile({...profile, peso: parseFloat(pesoAtual)});
+    setPesoAtual('');
+  };
+
+  const getPesoData = () => {
+    return historicoPeso.map(h => ({
+      data: new Date(h.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      peso: h.peso
+    }));
+  };
+
+  const getExercicioFavorito = () => {
+    if (workouts.length === 0) return 'Nenhum ainda';
+    const count = {};
+    workouts.forEach(w => {
+      count[w.exercicio] = (count[w.exercicio] || 0) + 1;
+    });
+    const favorito = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
+    return exercicios[favorito[0]].name;
+  };
+
+  const getPrevisao = () => {
+    if (workouts.length === 0) return 0;
+    const mediaDiaria = workouts.reduce((s, w) => s + w.calorias, 0) / workouts.length;
+    return Math.round(mediaDiaria * 30);
+  };
+
+  const salvarPerfil = () => {
+    if (!peso || !altura || !idade) {
+      alert('Preencha todos os campos!');
+      return;
+    }
+    setProfile({
+      peso: parseFloat(peso),
+      altura: parseFloat(altura),
+      idade: parseInt(idade),
+      sexo: sexo
+    });
+    setPage('workout');
+  };
+
+  const adicionarTreino = () => {
+    if (!tempo) {
+      alert('Digite o tempo!');
+      return;
+    }
+    
+    const t = parseInt(tempo);
+    const calorias = calcCalorias(exercicio, t, intensidade);
+    
+    setWorkouts([...workouts, {
+      id: Date.now(),
+      data: new Date().toISOString(),
+      exercicio,
+      tempo: t,
+      intensidade,
+      calorias
+    }]);
+    
+    setTempo('');
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 2000);
+  };
+
+  const getTodayWorkouts = () => {
+    const today = new Date().toISOString().split('T')[0];
+    return workouts.filter(w => w.data.split('T')[0] === today);
+  };
+
+  const getMonthStats = () => {
+    return {
+      total: workouts.reduce((s, w) => s + w.calorias, 0),
+      tempo: workouts.reduce((s, w) => s + w.tempo, 0),
+      count: workouts.length
+    };
+  };
+
+  const getPieData = () => {
+    const data = {};
+    workouts.forEach(w => {
+      data[w.exercicio] = (data[w.exercicio] || 0) + w.calorias;
+    });
+    return Object.entries(data).map(([k, v]) => ({
+      name: exercicios[k].name,
+      value: v
+    }));
+  };
+
+  const getLineData = () => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const cals = workouts
+        .filter(w => w.data.split('T')[0] === dateStr)
+        .reduce((s, w) => s + w.calorias, 0);
+      days.push({
+        dia: `${d.getDate()}/${d.getMonth() + 1}`,
+        calorias: cals
+      });
+    }
+    return days;
+  };
+
+  const COLORS = ['#00ff88', '#00d4ff', '#ff6b00', '#ffdd00', '#ff00ff', '#7c3aed'];
+
+  // Componente do Chat IA
+  const ChatBot = () => {
+    if (!showChat) {
+      return (
+        <button
+          onClick={() => setShowChat(true)}
+          className="fixed bottom-24 right-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-50"
+        >
+          <MessageCircle size={28} />
+        </button>
+      );
+    }
+
+    return (
+      <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-gray-900 border-2 border-purple-500 rounded-2xl shadow-2xl flex flex-col z-50">
+        <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4 rounded-t-2xl flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <MessageCircle size={24} />
+            <div>
+              <h3 className="font-bold">Personal IA</h3>
+              <p className="text-xs opacity-90">Powered by Groq</p>
+            </div>
+          </div>
+          <button onClick={() => setShowChat(false)} className="hover:bg-white/20 p-2 rounded-lg">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {messages.length === 0 && (
+            <div className="text-center text-gray-400 mt-8">
+              <MessageCircle size={48} className="mx-auto mb-4 opacity-50" />
+              <p className="text-sm">Olá! 👋 Sou seu Personal Trainer IA!</p>
+              <p className="text-xs mt-2">Pergunte sobre treinos, dietas, calorias...</p>
+            </div>
+          )}
+          
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                msg.role === 'user' 
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' 
+                  : 'bg-gray-800 text-gray-200'
+              }`}>
+                {msg.content}
+              </div>
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-800 p-3 rounded-2xl text-sm text-gray-400">
+                Pensando... 💭
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-700">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              placeholder="Digite sua pergunta..."
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={isLoading || !inputMessage.trim()}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 p-2 rounded-lg hover:opacity-80 disabled:opacity-50"
+            >
+              <Send size={20} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const Nav = () => {
+    if (page === 'register' || page === 'loading') return null;
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 px-2 py-2 shadow-2xl z-40">
+        <div className="flex justify-around items-center max-w-lg mx-auto">
+          <button onClick={() => setPage('workout')} className={`flex flex-col items-center gap-1 ${page === 'workout' ? 'text-green-400' : 'text-gray-500'}`}>
+            <Dumbbell size={22} />
+            <span className="text-xs">Treino</span>
+          </button>
+          <button onClick={() => setPage('dashboard')} className={`flex flex-col items-center gap-1 ${page === 'dashboard' ? 'text-purple-400' : 'text-gray-500'}`}>
+            <BarChart3 size={22} />
+            <span className="text-xs">Dashboard</span>
+          </button>
+          <button onClick={() => setPage('calendar')} className={`flex flex-col items-center gap-1 ${page === 'calendar' ? 'text-indigo-400' : 'text-gray-500'}`}>
+            <Calendar size={22} />
+            <span className="text-xs">Calendário</span>
+          </button>
+          <button onClick={() => setPage('stats')} className={`flex flex-col items-center gap-1 ${page === 'stats' ? 'text-orange-400' : 'text-gray-500'}`}>
+            <TrendingUp size={22} />
+            <span className="text-xs">Stats</span>
+          </button>
+          <button onClick={() => setPage('profile')} className={`flex flex-col items-center gap-1 ${page === 'profile' ? 'text-cyan-400' : 'text-gray-500'}`}>
+            <User size={22} />
+            <span className="text-xs">Perfil</span>
+          </button>
+          <button onClick={() => setPage('advanced')} className={`flex flex-col items-center gap-1 ${page === 'advanced' ? 'text-pink-400' : 'text-gray-500'}`}>
+            <Award size={22} />
+            <span className="text-xs">Avançado</span>
+          </button>
+        </div>
+      </nav>
+    );
+  };
+
+  if (page === 'loading') {
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Carregando...</div>;
+  }
+
+  if (page === 'register') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-4">
+        <div className="max-w-md mx-auto pt-12">
+          <div className="text-center mb-6">
+            <div className="inline-block p-4 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mb-4">
+              <Dumbbell size={40} />
+            </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent mb-2">FitTrack Pro</h1>
+            <p className="text-gray-400 text-sm">Seu treino, suas metas, seus resultados</p>
+          </div>
+
+          <div className="bg-gray-800 p-5 rounded-2xl border border-gray-700 space-y-3">
+            <h2 className="text-xl font-bold mb-3">Configuração Inicial</h2>
+            
+            <div>
+              <label className="block text-sm mb-1">Peso (kg)</label>
+              <input type="number" step="0.1" value={peso} onChange={(e) => setPeso(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="75" />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-1">Altura (cm)</label>
+              <input type="number" step="0.1" value={altura} onChange={(e) => setAltura(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="175" />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-1">Idade</label>
+              <input type="number" value={idade} onChange={(e) => setIdade(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="25" />
+            </div>
+
+            <div>
+              <label className="block text-sm mb-1">Sexo</label>
+              <select value={sexo} onChange={(e) => setSexo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-green-500 focus:outline-none">
+                <option value="masculino">Masculino</option>
+                <option value="feminino">Feminino</option>
+              </select>
+            </div>
+
+            <button onClick={salvarPerfil} className="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 rounded-lg mt-2">
+              Começar Agora 🚀
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderizar o restante das páginas com o ChatBot
+  return (
+    <div>
+      {page === 'workout' && (
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+          {showSuccess && (
+            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 px-4 py-3 rounded-xl shadow-2xl z-50 text-sm font-bold">
+              ✅ Treino Registrado!
+            </div>
+          )}
+          
+          <div className="bg-gradient-to-r from-green-500 to-blue-500 p-5 rounded-b-3xl">
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Flame className="text-yellow-300" size={28} /> Registrar Treino
+            </h1>
+            <p className="text-gray-100 mt-1 text-sm">Hoje: {getTodayWorkouts().reduce((s, w) => s + w.calorias, 0)} cal queimadas</p>
+          </div>
+
+          <div className="p-4">
+            <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 space-y-4">
+              <div>
+                <label className="block text-sm mb-2">Tipo de Exercício</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(exercicios).map(([k, ex]) => (
+                    <button key={k} onClick={() => setExercicio(k)} className={`p-3 rounded-xl border-2 ${exercicio === k ? 'border-green-500 bg-green-500/20' : 'border-gray-700 bg-gray-900'}`}>
+                      <div className="text-2xl mb-1">{ex.icon}</div>
+                      <div className="text-xs">{ex.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-2">Tempo (minutos)</label>
+                <input type="number" value={tempo} onChange={(e) => setTempo(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xl font-bold text-center text-white focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="30" />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-2">Intensidade</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['leve', 'moderado', 'intenso'].map(int => (
+                    <button key={int} onClick={() => setIntensidade(int)} className={`p-2 rounded-lg border-2 capitalize text-sm ${intensidade === int ? 'border-green-500 bg-green-500/20' : 'border-gray-700 bg-gray-900'}`}>
+                      {int}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={adicionarTreino} className="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+                <Activity size={20} /> Registrar
+              </button>
+            </div>
+
+            {getTodayWorkouts().length > 0 && (
+              <div className="mt-4 bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                <h3 className="text-lg font-bold mb-3">Treinos de Hoje</h3>
+                <div className="space-y-2">
+                  {getTodayWorkouts().map(w => (
+                    <div key={w.id} className="bg-gray-900 p-3 rounded-lg flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{exercicios[w.exercicio].icon}</span>
+                        <div>
+                          <div className="font-medium text-sm">{exercicios[w.exercicio].name}</div>
+                          <div className="text-xs text-gray-400">{w.tempo}min • {w.intensidade}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xl font-bold text-green-400">{w.calorias}</div>
+                        <div className="text-xs text-gray-400">cal</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <Nav />
+          <ChatBot />
+        </div>
+      )}
+
+      {page !== 'workout' && page !== 'register' && page !== 'loading' && (
+        <>
+          {page === 'dashboard' && (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+              <div className="bg-gradient-to-r from-purple-600 to-pink-500 p-5 rounded-b-3xl">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <BarChart3 size={28} /> Dashboard
+                </h1>
+                <p className="text-gray-100 mt-1 text-sm">Seu desempenho</p>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 p-4 rounded-2xl border border-green-500/50">
+                    <Flame className="text-green-400 mb-1" size={24} />
+                    <div className="text-2xl font-bold">{getTodayWorkouts().reduce((s, w) => s + w.calorias, 0)}</div>
+                    <div className="text-xs text-gray-300">Cal Hoje</div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-4 rounded-2xl border border-blue-500/50">
+                    <Clock className="text-blue-400 mb-1" size={24} />
+                    <div className="text-2xl font-bold">{getTodayWorkouts().reduce((s, w) => s + w.tempo, 0)}</div>
+                    <div className="text-xs text-gray-300">Min Hoje</div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-2">📊 Calorias por Exercício</h3>
+                  {workouts.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie data={getPieData()} cx="50%" cy="50%" outerRadius={70} dataKey="value" label={(e) => `${e.name} ${((e.value / getMonthStats().total) * 100).toFixed(0)}%`}>
+                          {getPieData().map((e, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">Nenhum treino ainda</div>
+                  )}
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-2">📈 Últimos 7 Dias</h3>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={getLineData()}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis dataKey="dia" stroke="#9ca3af" style={{fontSize: 12}} />
+                      <YAxis stroke="#9ca3af" style={{fontSize: 12}} />
+                      <Tooltip contentStyle={{backgroundColor: '#1f2937', border: '1px solid #374151', fontSize: 12}} />
+                      <Line type="monotone" dataKey="calorias" stroke="#10b981" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <Nav />
+              <ChatBot />
+            </div>
+          )}
+
+          {page === 'calendar' && (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+              <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-5 rounded-b-3xl">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <Calendar size={28} /> Calendário
+                </h1>
+                <p className="text-gray-100 mt-1 text-sm">Histórico mensal</p>
+              </div>
+
+              <div className="p-4">
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <div className="flex justify-between items-center mb-4">
+                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))} className="bg-gray-900 px-3 py-1 rounded-lg text-sm font-bold">←</button>
+                    <h2 className="text-lg font-bold">{['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][currentMonth.getMonth()]} {currentMonth.getFullYear()}</h2>
+                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))} className="bg-gray-900 px-3 py-1 rounded-lg text-sm font-bold">→</button>
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                      <div key={i} className="text-center text-xs font-bold text-gray-400 py-1">{d}</div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-7 gap-1">
+                    {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() }).map((_, i) => <div key={`e${i}`} />)}
+                    
+                    {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }).map((_, i) => {
+                      const day = i + 1;
+                      const dateStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const dayWorkouts = workouts.filter(w => w.data.split('T')[0] === dateStr);
+                      const cals = dayWorkouts.reduce((s, w) => s + w.calorias, 0);
+                      const today = new Date();
+                      const isToday = today.getDate() === day && today.getMonth() === currentMonth.getMonth() && today.getFullYear() === currentMonth.getFullYear();
+                      
+                      return (
+                        <div key={day} className={`aspect-square p-1 rounded-lg border ${isToday ? 'border-green-500 bg-green-500/20' : dayWorkouts.length > 0 ? 'border-blue-500 bg-blue-500/20' : 'border-gray-700 bg-gray-900'}`}>
+                          <div className="text-xs font-bold">{day}</div>
+                          {cals > 0 && <div className="text-xs text-green-400 font-bold">{cals}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded border-2 border-green-500 bg-green-500/20" />
+                        <span>Hoje</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded border-2 border-blue-500 bg-blue-500/20" />
+                        <span>Treino</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-4 h-4 rounded border-2 border-gray-700 bg-gray-900" />
+                        <span>Sem treino</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {workouts.length > 0 && (
+                  <div className="mt-4 bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                    <h3 className="text-lg font-bold mb-3">📊 Resumo do Mês</h3>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-gray-900 p-3 rounded-lg text-center">
+                        <div className="text-xl font-bold text-purple-400">{getMonthStats().count}</div>
+                        <div className="text-xs text-gray-400">Treinos</div>
+                      </div>
+                      <div className="bg-gray-900 p-3 rounded-lg text-center">
+                        <div className="text-xl font-bold text-green-400">{getMonthStats().total}</div>
+                        <div className="text-xs text-gray-400">Calorias</div>
+                      </div>
+                      <div className="bg-gray-900 p-3 rounded-lg text-center">
+                        <div className="text-xl font-bold text-blue-400">{getMonthStats().tempo}</div>
+                        <div className="text-xs text-gray-400">Minutos</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <Nav />
+              <ChatBot />
+            </div>
+          )}
+
+          {page === 'stats' && (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+              <div className="bg-gradient-to-r from-orange-500 to-red-500 p-5 rounded-b-3xl">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <TrendingUp size={28} /> Estatísticas
+                </h1>
+                <p className="text-gray-100 mt-1 text-sm">Resumo completo</p>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 p-3 rounded-2xl border border-purple-500/50">
+                    <Award className="text-purple-400 mb-1" size={22} />
+                    <div className="text-xl font-bold">{getMonthStats().count}</div>
+                    <div className="text-xs text-gray-300">Treinos</div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 p-3 rounded-2xl border border-green-500/50">
+                    <Flame className="text-green-400 mb-1" size={22} />
+                    <div className="text-xl font-bold">{getMonthStats().total}</div>
+                    <div className="text-xs text-gray-300">Calorias</div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-3 rounded-2xl border border-blue-500/50">
+                    <Clock className="text-blue-400 mb-1" size={22} />
+                    <div className="text-xl font-bold">{getMonthStats().tempo}</div>
+                    <div className="text-xs text-gray-300">Minutos</div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-2">🏆 Ranking</h3>
+                  {getPieData().length > 0 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={getPieData().sort((a, b) => b.value - a.value)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="name" stroke="#9ca3af" style={{fontSize: 11}} />
+                        <YAxis stroke="#9ca3af" style={{fontSize: 11}} />
+                        <Tooltip contentStyle={{backgroundColor: '#1f2937', border: '1px solid #374151', fontSize: 12}} />
+                        <Bar dataKey="value" fill="#10b981" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">Sem dados</div>
+                  )}
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-2">ℹ️ Como Funciona</h3>
+                  <div className="space-y-2 text-sm text-gray-300">
+                    <p><strong className="text-green-400">Cálculo:</strong> MET × Peso × Tempo (horas)</p>
+                    <p><strong className="text-blue-400">Intensidades:</strong></p>
+                    <ul className="list-disc list-inside pl-2 space-y-1 text-xs">
+                      <li><strong>Leve:</strong> Confortável, conversa normal</li>
+                      <li><strong>Moderado:</strong> Respiração acelerada</li>
+                      <li><strong>Intenso:</strong> Esforço máximo</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <Nav />
+              <ChatBot />
+            </div>
+          )}
+
+          {page === 'profile' && (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+              <div className="bg-gradient-to-r from-cyan-500 to-blue-500 p-5 rounded-b-3xl">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <User size={28} /> Perfil
+                </h1>
+                <p className="text-gray-100 mt-1 text-sm">Suas informações</p>
+              </div>
+
+              <div className="p-4">
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700 space-y-4">
+                  <div className="text-center pb-4 border-b border-gray-700">
+                    <div className="w-20 h-20 bg-gradient-to-r from-green-400 to-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center text-3xl">
+                      👤
+                    </div>
+                    <h2 className="text-xl font-bold">Atleta FitTrack</h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
+                      <span className="text-gray-400 text-sm">Peso</span>
+                      <span className="text-lg font-bold">{profile.peso} kg</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
+                      <span className="text-gray-400 text-sm">Altura</span>
+                      <span className="text-lg font-bold">{profile.altura} cm</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
+                      <span className="text-gray-400 text-sm">Idade</span>
+                      <span className="text-lg font-bold">{profile.idade} anos</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center p-3 bg-gray-900 rounded-lg">
+                      <span className="text-gray-400 text-sm">Sexo</span>
+                      <span className="text-lg font-bold capitalize">{profile.sexo}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center p-3 bg-gradient-to-r from-green-500/20 to-blue-500/20 rounded-lg border border-green-500/50">
+                      <span className="text-gray-300 text-sm">TMB</span>
+                      <span className="text-lg font-bold text-green-400">{Math.round(calcTMB())} cal/dia</span>
+                    </div>
+
+                    <div className="p-3 bg-gray-900 rounded-lg">
+                      <h3 className="font-bold mb-2 text-sm">📊 Estatísticas Totais</h3>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Treinos:</span>
+                          <span className="font-bold text-purple-400">{workouts.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Calorias:</span>
+                          <span className="font-bold text-green-400">{workouts.reduce((s, w) => s + w.calorias, 0)} cal</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Minutos:</span>
+                          <span className="font-bold text-blue-400">{workouts.reduce((s, w) => s + w.tempo, 0)} min</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setPeso(profile.peso.toString());
+                      setAltura(profile.altura.toString());
+                      setIdade(profile.idade.toString());
+                      setSexo(profile.sexo);
+                      setPage('register');
+                    }}
+                    className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 rounded-lg transition-all"
+                  >
+                    Editar Perfil
+                  </button>
+                </div>
+              </div>
+              <Nav />
+              <ChatBot />
+            </div>
+          )}
+
+          {page === 'advanced' && (
+            <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white pb-20">
+              <div className="bg-gradient-to-r from-pink-500 to-purple-500 p-5 rounded-b-3xl">
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <Award size={28} /> Dados Avançados
+                </h1>
+                <p className="text-gray-100 mt-1 text-sm">Análises detalhadas</p>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-3">📏 IMC</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="text-4xl font-bold text-green-400">{calcIMC()}</div>
+                      <div className={`text-sm font-medium ${getIMCCategoria(parseFloat(calcIMC())).cor}`}>{getIMCCategoria(parseFloat(calcIMC())).texto}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-3">⚖️ Atualizar Peso</h3>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={pesoAtual}
+                      onChange={(e) => setPesoAtual(e.target.value)}
+                      className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-pink-500 focus:outline-none"
+                      placeholder="Novo peso (kg)"
+                    />
+                    <button
+                      onClick={adicionarPeso}
+                      className="bg-gradient-to-r from-pink-500 to-purple-500 px-4 py-2 rounded-lg font-bold"
+                    >
+                      Salvar
+                    </button>
+                  </div>
+                </div>
+
+                {historicoPeso.length > 0 && (
+                  <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                    <h3 className="text-lg font-bold mb-2">📊 Evolução do Peso</h3>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={getPesoData()}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="data" stroke="#9ca3af" style={{fontSize: 11}} />
+                        <YAxis stroke="#9ca3af" style={{fontSize: 11}} domain={['dataMin - 2', 'dataMax + 2']} />
+                        <Tooltip contentStyle={{backgroundColor: '#1f2937', border: '1px solid #374151', fontSize: 12}} />
+                        <Line type="monotone" dataKey="peso" stroke="#ec4899" strokeWidth={3} dot={{ fill: '#ec4899', r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                <div className="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                  <h3 className="text-lg font-bold mb-3">💡 Insights</h3>
+                  <div className="space-y-3">
+                    <div className="bg-gray-900 p-3 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">🏆</span>
+                        <span className="font-bold text-sm">Exercício Favorito</span>
+                      </div>
+                      <div className="text-purple-400 font-bold">{getExercicioFavorito()}</div>
+                    </div>
+
+                    <div className="bg-gray-900 p-3 rounded-lg">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">🔮</span>
+                        <span className="font-bold text-sm">Previsão 30 Dias</span>
+                      </div>
+                      <div className="text-blue-400 font-bold">{getPrevisao()} cal</div>
+                      <div className="text-xs text-gray-400">Se manter o ritmo atual</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <Nav />
+              <ChatBot />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
